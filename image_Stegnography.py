@@ -1,136 +1,106 @@
-# Python program implementing Image Steganography
-
-# PIL module is used to extract
-# pixels of image and modify it
+import cv2
+import numpy as np
 from PIL import Image
 
-# Convert encoding data into 8-bit binary
-# form using ASCII value of characters
-def genData(data):
+#it convert data in binary formate
 
-		# list of binary codes
-		# of given data
-		newd = []
 
-		for i in data:
-			newd.append(format(ord(i), '08b'))
-		return newd
+def data2binary(data):
+    if type(data) == str:
+        p = ''.join([format(ord(i), '08b')for i in data])
+    elif type(data) == bytes or type(data) == np.ndarray:
+        p = [format(i, '08b')for i in data]
+    return p
 
-# Pixels are modified according to the
-# 8-bit binary data and finally returned
-def modPix(pix, data):
 
-	datalist = genData(data)
-	lendata = len(datalist)
-	imdata = iter(pix)
+# hide data in given img
 
-	for i in range(lendata):
+def hidedata(img, data):
+    data += "$$"                                   #'$$'--> secrete key
+    d_index = 0
+    b_data = data2binary(data)
+    len_data = len(b_data)
 
-		# Extracting 3 pixels at a time
-		pix = [value for value in imdata.__next__()[:3] + imdata.__next__()[:3] + imdata.__next__()[:3]]
+ #iterate pixels from image and update pixel values
 
-		# Pixel value should be made
-		# odd for 1 and even for 0
-		for j in range(0, 8):
-			if (datalist[i][j] == '0' and pix[j]% 2 != 0):
-				pix[j] -= 1
+    for value in img:
+        for pix in value:
+            r, g, b = data2binary(pix)
+            if d_index < len_data:
+                pix[0] = int(r[:-1] + b_data[d_index])
+                d_index += 1
+            if d_index < len_data:
+                pix[1] = int(g[:-1] + b_data[d_index])
+                d_index += 1
+            if d_index < len_data:
+                pix[2] = int(b[:-1] + b_data[d_index])
+                d_index += 1
+            if d_index >= len_data:
+                break
+    return img
 
-			elif (datalist[i][j] == '1' and pix[j] % 2 == 0):
-				if(pix[j] != 0):
-					pix[j] -= 1
-				else:
-					pix[j] += 1
-				# pix[j] -= 1
 
-		# Eighth pixel of every set tells
-		# whether to stop ot read further.
-		# 0 means keep reading; 1 means thec
-		# message is over.
-		if (i == lendata - 1):
-			if (pix[-1] % 2 == 0):
-				if(pix[-1] != 0):
-					pix[-1] -= 1
-				else:
-					pix[-1] += 1
-
-		else:
-			if (pix[-1] % 2 != 0):
-				pix[-1] -= 1
-
-		pix = tuple(pix)
-		yield pix[0:3]
-		yield pix[3:6]
-		yield pix[6:9]
-
-def encode_enc(newimg, data):
-	w = newimg.size[0]
-	(x, y) = (0, 0)
-
-	for pixel in modPix(newimg.getdata(), data):
-
-		# Putting modified pixels in the new image
-		newimg.putpixel((x, y), pixel)
-		if (x == w - 1):
-			x = 0
-			y += 1
-		else:
-			x += 1
-
-# Encode data into image
 def encode():
-	img = input("Enter image name(with extension) : ")
-	image = Image.open(img, 'r')
+    img_name = input("\nenter image name:")
+    image = cv2.imread(img_name)
+    img = Image.open(img_name, 'r')
+    w, h = img.size
+    data = input("\nenter message:")
+    if len(data) == 0:
+        raise ValueError("Empty data")
+    enc_img = input("\nenter encoded image name:")
+    enc_data = hidedata(image, data)
+    cv2.imwrite(enc_img, enc_data)
+    img1 = Image.open(enc_img, 'r')
+    img1 = img1.resize((w, h),Image.ANTIALIAS)
+    # optimize with 65% quality
+    if w != h:
+        img1.save(enc_img, optimize=True, quality=65)
+    else:
+        img1.save(enc_img)
 
-	data = input("Enter data to be encoded : ")
-	if (len(data) == 0):
-		raise ValueError('Data is empty')
+# decoding
 
-	newimg = image.copy()
-	encode_enc(newimg, data)
+def find_data(img):
+    bin_data = ""
+    for value in img:
+        for pix in value:
+            r, g, b = data2binary(pix)
+            bin_data += r[-1]
+            bin_data += g[-1]
+            bin_data += b[-1]
 
-	new_img_name = input("Enter the name of new image(with extension) : ")
-	newimg.save(new_img_name, str(new_img_name.split(".")[1].upper()))
+    all_bytes = [bin_data[i: i + 8] for i in range(0, len(bin_data), 8)]
 
-# Decode the data in the image
+    readable_data = ""
+    for x in all_bytes:
+        readable_data += chr(int(x, 2))
+        if readable_data[-2:] == "$$":
+            break
+    return readable_data[:-2]
+
+
 def decode():
-	img = input("Enter image name(with extension) : ")
-	image = Image.open(img, 'r')
+    img_name = input("\nEnter Image name : ")
+    image = cv2.imread(img_name)
+    img=Image.open(img_name,'r')
+    msg = find_data(image)
+    return msg
 
-	data = ''
-	imgdata = iter(image.getdata())
 
-	while (True):
-		pixels = [value for value in imgdata.__next__()[:3] +
-								imgdata.__next__()[:3] +
-								imgdata.__next__()[:3]]
+def stegnography():
+    x = 1
+    while x != 0:
+       print('''\nImage stegnography
+       1.encode
+       2.decode''')
+       u_in = int(input("\n enter your choice:"))
+       if u_in == 1:
+           encode()
+       else:
+           ans = decode()
+           print("\n your message:"+ans)
+       x = int(input("\nenter 1 for continue otherwise 0:"))
 
-		# string of binary data
-		binstr = ''
 
-		for i in pixels[:8]:
-			if (i % 2 == 0):
-				binstr += '0'
-			else:
-				binstr += '1'
-
-		data += chr(int(binstr, 2))
-		if (pixels[-1] % 2 != 0):
-			return data
-
-# Main Function
-def main():
-	a = int(input(":: Welcome to Steganography ::\n"
-						"1. Encode\n2. Decode\n"))
-	if (a == 1):
-		encode()
-
-	elif (a == 2):
-		print("Decoded Word : " + decode())
-	else:
-		raise Exception("Enter correct input")
-
-# Driver Code
-if __name__ == '__main__' :
-
-	# Calling main function
-	main()
+stegnography()
